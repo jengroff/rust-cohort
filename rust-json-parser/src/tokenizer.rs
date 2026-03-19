@@ -1,80 +1,55 @@
-// TODO: Define your Token enum here
-// Hint: You need variants for:
-// LeftBrace, RightBrace, LeftBracket, RightBracket, Comma, Colon
-// String(String), Number(f64), Boolean(bool), Null
-
-// TODO: Implement your tokenize function here
-// pub fn tokenize(input: &str) -> Vec<Token> {
-//     // Your code goes here
-// }
-
-#[derive(Debug, PartialEq)]
-pub enum Token {
-    LeftBrace,
-    RightBrace,
-    LeftBracket,
-    RightBracket,
-    Comma,
-    Colon,
-    String(String),
-    Number(f64),
-    Boolean(bool),
-    Null,
-  }
+use crate::enums::Token;
 
 
-
-  pub fn tokenize(input: &str) -> Vec<Token> {
-      let mut tokens = Vec::new();
-      let chars: Vec<char> = input.chars().collect();
-      let mut i = 0;
-
-      while i < chars.len() {
-          match chars[i] {
-              '{' => { tokens.push(Token::LeftBrace); i += 1; }
-              '}' => { tokens.push(Token::RightBrace); i += 1; }
-              '[' => { tokens.push(Token::LeftBracket); i += 1; }
-              ']' => { tokens.push(Token::RightBracket); i += 1; }
-              ',' => { tokens.push(Token::Comma); i += 1; }
-              ':' => { tokens.push(Token::Colon); i += 1; }
-              '"' => {
-                  i += 1; // skip opening quote
-                  let mut s = String::new();
-                  while i < chars.len() && chars[i] != '"' {
-                      s.push(chars[i]);
-                      i += 1;
-                  }
-                  i += 1; // skip closing quote
-                  tokens.push(Token::String(s));
-              }
-              '0'..='9' | '-' => {
-                  let mut num_str = String::new();
-                  while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.' || chars[i] == '-') {
-                      num_str.push(chars[i]);
-                      i += 1;
-                  }
-                  if let Ok(n) = num_str.parse::<f64>() {
-                      tokens.push(Token::Number(n));
-                  }
-              }
-              't' if chars[i..].starts_with(&['t', 'r', 'u', 'e']) => {
-                  tokens.push(Token::Boolean(true));
-                  i += 4;
-              }
-              'f' if chars[i..].starts_with(&['f', 'a', 'l', 's', 'e']) => {
-                  tokens.push(Token::Boolean(false));
-                  i += 5;
-              }
-              'n' if chars[i..].starts_with(&['n', 'u', 'l', 'l']) => {
-                  tokens.push(Token::Null);
-                  i += 4;
-              }
-              _ => { i += 1; }
-          }
-      }
-
-      tokens
-  }
+pub fn tokenize(input: &str) -> Vec<Token> {
+    let mut tokens = Vec::new();
+    let chars: Vec<char> = input.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
+            '{' => { tokens.push(Token::LeftBrace); i += 1; }
+            '}' => { tokens.push(Token::RightBrace); i += 1; }
+            '[' => { tokens.push(Token::LeftBracket); i += 1; }
+            ']' => { tokens.push(Token::RightBracket); i += 1; }
+            ',' => { tokens.push(Token::Comma); i += 1; }
+            ':' => { tokens.push(Token::Colon); i += 1; }
+            '"' => {
+                i += 1; // skip opening quote
+                let mut s = String::new();
+                while i < chars.len() && chars[i] != '"' {
+                    s.push(chars[i]);
+                    i += 1;
+                }
+                i += 1; // skip closing quote
+                tokens.push(Token::String(s));
+            }
+            '0'..='9' | '-' => {
+                let mut num_str = String::new();
+                while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.' || chars[i] == '-') {
+                    num_str.push(chars[i]);
+                    i += 1;
+                }
+                if let Ok(n) = num_str.parse::<f64>() {
+                    tokens.push(Token::Number(n));
+                }
+            }
+            't' if chars[i..].starts_with(&['t', 'r', 'u', 'e']) => {
+                tokens.push(Token::Boolean(true));
+                i += 4;
+            }
+            'f' if chars[i..].starts_with(&['f', 'a', 'l', 's', 'e']) => {
+                tokens.push(Token::Boolean(false));
+                i += 5;
+            }
+            'n' if chars[i..].starts_with(&['n', 'u', 'l', 'l']) => {
+                tokens.push(Token::Null);
+                i += 4;
+            }
+            _ => { i += 1; }
+        }
+    }
+    tokens
+}
 
 
 #[cfg(test)]

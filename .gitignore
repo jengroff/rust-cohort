@@ -1,4 +1,10 @@
 target/
+rust-toolchain.toml
+
 .vscode/
 *.vscode
 *.code-workspace
+rust-cohort.code-workspace
+
+.claude/
+*.claude
