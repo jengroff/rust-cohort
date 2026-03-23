@@ -1,2 +1,2 @@
-  pub mod tokenizer;
-  pub mod enums;
+pub mod enums;
+pub mod tokenizer;

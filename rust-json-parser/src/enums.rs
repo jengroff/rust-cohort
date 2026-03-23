@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     LeftBrace,
     RightBrace,
@@ -10,4 +10,4 @@ pub enum Token {
     Number(f64),
     Boolean(bool),
     Null,
-  }
+}
