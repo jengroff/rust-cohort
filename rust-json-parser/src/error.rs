@@ -1,6 +1,6 @@
-// Week 2: Custom error type for JSON parsing
 use std::fmt;
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum JsonError {
     UnexpectedToken {
         expected: String,
@@ -13,31 +13,39 @@ pub enum JsonError {
     },
     InvalidNumber {
         value: String,
-        position: usize
+        position: usize,
     },
 }
-
 
 impl fmt::Display for JsonError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            JsonError::UnexpectedToken { expected, found, position} => {
-                write!(f, "Unexpected token at position {}: expected {}, found {}",
-                    position, expected, found)
+            JsonError::UnexpectedToken {
+                expected,
+                found,
+                position,
+            } => {
+                write!(
+                    f,
+                    "Unexpected token at position {}: expected {}, found {}",
+                    position, expected, found
+                )
             }
             JsonError::UnexpectedEndOfInput { expected, position } => {
-                write!(f, "Unexpected end of input at position {}: expected {}",
-                        position, expected)
-                        
+                write!(
+                    f,
+                    "Unexpected end of input at position {}: expected {}",
+                    position, expected
+                )
             }
             JsonError::InvalidNumber { value, position } => {
                 write!(f, "Invalid number '{}' at position {}", value, position)
             }
         }
-
+    }
+}
 
 impl std::error::Error for JsonError {}
-
 
 #[cfg(test)]
 mod tests {
@@ -88,8 +96,8 @@ mod tests {
         };
 
         // All variants should be Debug-printable
-        format!("{:?}", token_error);
-        format!("{:?}", eof_error);
-        format!("{:?}", num_error);
+        let _ = format!("{:?}", token_error);
+        let _ = format!("{:?}", eof_error);
+        let _ = format!("{:?}", num_error);
     }
 }

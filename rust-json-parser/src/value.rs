@@ -1,22 +1,41 @@
-// Week 2: JsonValue enum to represent parsed JSON values
-// Week 2 focuses on basic types only - no collections yet
 
-// TODO: Define your JsonValue enum here
-// Hint: You need variants for:
-// - Null
-// - Boolean(bool)
-// - Number(f64)
-// - String(String)
+#[derive(Debug, Clone, PartialEq)]
+pub enum JsonValue {
+    Null,
+    Boolean(bool),
+    Number(f64),
+    Text(String),
+}
 
-// TODO: Implement helper methods
-// impl JsonValue {
-//     pub fn is_null(&self) -> bool { }
-//     pub fn as_str(&self) -> Option<&str> { }
-//     pub fn as_f64(&self) -> Option<f64> { }
-//     pub fn as_bool(&self) -> Option<bool> { }
-// }
+impl JsonValue {
+    pub fn is_null(&self) -> bool {
+        match self {
+            JsonValue::Null => true,
+            _ => false,
+        }
+    }
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            JsonValue::Text(s) => Some(s),
+            _ => None,
+        }
+    }
+    pub fn as_f64(&self) -> Option<f64> {
+        match *self {
+            JsonValue::Number(n) => Some(n),
+            _ => None,
+        }
+    }
+    pub fn as_bool(&self) -> Option<bool> {
+        match *self {
+            JsonValue::Boolean(b) => Some(b),
+            _ => None,
+        }
+    }
+}
 
-// Copy these tests as-is:
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -26,7 +45,7 @@ mod tests {
         let null_val = JsonValue::Null;
         let bool_val = JsonValue::Boolean(true);
         let num_val = JsonValue::Number(42.5);
-        let str_val = JsonValue::String("hello".to_string());
+        let str_val = JsonValue::Text("hello".to_string());
 
         assert!(null_val.is_null());
         assert_eq!(bool_val.as_bool(), Some(true));
@@ -36,7 +55,7 @@ mod tests {
 
     #[test]
     fn test_json_value_accessors() {
-        let value = JsonValue::String("test".to_string());
+        let value = JsonValue::Text("test".to_string());
         assert_eq!(value.as_str(), Some("test"));
         assert_eq!(value.as_f64(), None);
         assert_eq!(value.as_bool(), None);
@@ -59,8 +78,8 @@ mod tests {
         assert_eq!(JsonValue::Boolean(true), JsonValue::Boolean(true));
         assert_eq!(JsonValue::Number(42.0), JsonValue::Number(42.0));
         assert_eq!(
-            JsonValue::String("test".to_string()),
-            JsonValue::String("test".to_string())
+            JsonValue::Text("test".to_string()),
+            JsonValue::Text("test".to_string())
         );
 
         assert_ne!(JsonValue::Null, JsonValue::Boolean(false));

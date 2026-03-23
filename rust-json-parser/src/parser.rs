@@ -1,21 +1,39 @@
-// Week 2: Simple parser for primitive JSON values
 use crate::error::JsonError;
 use crate::tokenizer::{Token, tokenize};
 use crate::value::JsonValue;
 
-// Result type alias for convenience
+
 type Result<T> = std::result::Result<T, JsonError>;
 
-// TODO: Implement your parse_json function
-// pub fn parse_json(input: &str) -> Result<JsonValue> {
-//     // Your code goes here
-//     // Hint:
-//     // 1. Call tokenize(input)?  (? propagates errors)
-//     // 2. Check if tokens is empty
-//     // 3. Match on tokens[0] and convert to JsonValue
-// }
 
-// Copy these tests as-is:
+pub fn parse_json(input: &str) -> Result<JsonValue> {
+    // Step 1: tokenize. The ? propagates any JsonError from tokenize.
+    let tokens = tokenize(input)?;
+
+    // Step 2: handle empty input.
+    if tokens.is_empty() {
+        return Err(JsonError::UnexpectedEndOfInput {
+            expected: "JSON value".to_string(),
+            position: 0,
+        });
+    }
+
+    match tokens[0].clone() {
+        Token::String(s) => Ok(JsonValue::Text(s)),
+        Token::Number(n) => Ok(JsonValue::Number(n)),
+        Token::Boolean(b) => Ok(JsonValue::Boolean(b)),
+        Token::Null => Ok(JsonValue::Null),
+        other => Err(JsonError::UnexpectedToken {
+            expected: "JSON value (string, number, boolean, or null)".to_string(),
+            found: format!("{:?}", other),
+            position: 0,
+        }),
+    }
+}
+
+
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -23,7 +41,7 @@ mod tests {
     #[test]
     fn test_parse_string() {
         let result = parse_json(r#""hello world""#).unwrap();
-        assert_eq!(result, JsonValue::String("hello world".to_string()));
+        assert_eq!(result, JsonValue::Text("hello world".to_string()));
     }
 
     #[test]
