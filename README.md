@@ -1,15 +1,21 @@
 # rust-json-parser
 
-A JSON tokenizer built in Rust, written as part of rust-cohort-2.
+A JSON parser built in Rust, written as part of rust-cohort-2.
 
 ## What it does
 
-Takes a JSON string as input and breaks it down into a flat list of tokens — the first step in parsing JSON.
+Takes a JSON string, tokenizes it, and parses it into a `JsonValue` — currently supporting primitive types (strings, numbers, booleans, and null).
 
-For example, `{"name": "Alice"}` becomes:
+For example, `{"name": "Alice"}` tokenizes to:
 
 ```
 LeftBrace, String("name"), Colon, String("Alice"), RightBrace
+```
+
+And `"hello"` parses to:
+
+```rust
+JsonValue::Text("hello".to_string())
 ```
 
 ## Tokens
@@ -27,15 +33,25 @@ LeftBrace, String("name"), Colon, String("Alice"), RightBrace
 | `Boolean(b)` | `true`, `false` |
 | `Null` | `null` |
 
+## JsonValue
+
+Parsed JSON is represented as:
+
+```rust
+JsonValue::Null
+JsonValue::Boolean(bool)
+JsonValue::Number(f64)
+JsonValue::Text(String)
+```
+
 ## Usage
 
 ```rust
-mod tokenizer;
-mod enums;
+use rust_json_parser::parser::parse_json;
 
 fn main() {
-    let tokens = tokenizer::tokenize(r#"{"name": "Alice", "age": 30}"#);
-    println!("{:?}", tokens);
+    let value = parse_json(r#""hello world""#).unwrap();
+    println!("{:?}", value); // Text("hello world")
 }
 ```
 
@@ -55,8 +71,9 @@ cargo test
 
 ```
 src/
-  main.rs       # entry point
-  tokenizer.rs  # tokenize() function
-  enums.rs      # Token enum
   lib.rs        # library crate root
+  tokenizer.rs  # Token enum and tokenize() function
+  value.rs      # JsonValue enum
+  error.rs      # JsonError enum
+  parser.rs     # parse_json() function
 ```
