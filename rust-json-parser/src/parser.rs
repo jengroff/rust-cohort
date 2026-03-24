@@ -2,9 +2,7 @@ use crate::error::JsonError;
 use crate::tokenizer::{Token, tokenize};
 use crate::value::JsonValue;
 
-
 type Result<T> = std::result::Result<T, JsonError>;
-
 
 pub fn parse_json(input: &str) -> Result<JsonValue> {
     // Step 1: tokenize. The ? propagates any JsonError from tokenize.
@@ -30,9 +28,6 @@ pub fn parse_json(input: &str) -> Result<JsonValue> {
         }),
     }
 }
-
-
-
 
 #[cfg(test)]
 mod tests {
@@ -112,7 +107,7 @@ mod tests {
         let result = parse_json("@invalid@");
 
         match result {
-            Err(JsonError::UnexpectedToken { .. }) => {}, // Expected
+            Err(JsonError::UnexpectedToken { .. }) => {} // Expected
             _ => panic!("Expected UnexpectedToken error"),
         }
     }

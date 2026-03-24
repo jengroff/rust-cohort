@@ -1,6 +1,5 @@
 use crate::error::JsonError;
 
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     LeftBrace,
@@ -14,8 +13,6 @@ pub enum Token {
     Boolean(bool),
     Null,
 }
-
-
 
 pub fn tokenize(input: &str) -> Result<Vec<Token>, JsonError> {
     let mut tokens = Vec::new();
@@ -124,8 +121,6 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, JsonError> {
     }
     Ok(tokens)
 }
-
-
 
 #[cfg(test)]
 mod tests {

@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum JsonValue {
     Null,
@@ -33,8 +32,6 @@ impl JsonValue {
         }
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
