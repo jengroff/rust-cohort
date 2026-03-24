@@ -1,11 +1,14 @@
-use rust_json_parser::tokenizer;
+use rust_json_parser::{parse_json, JsonError};
 
-fn main() {
+
+fn main() -> Result<(), JsonError> {
     let json_string = r#"{
         "name": "Alice Johnson",
         "age": 28,
         "email": "alice@example.com"
         }"#;
-    let tokens = tokenizer::tokenize(json_string);
-    println!("{:?}", tokens);
+    let value = parse_json(json_string);
+    println!("Parsed: {:?}", value);
+
+    Ok(())
 }

@@ -8,10 +8,7 @@ pub enum JsonValue {
 
 impl JsonValue {
     pub fn is_null(&self) -> bool {
-        match self {
-            JsonValue::Null => true,
-            _ => false,
-        }
+        matches!(self, JsonValue::Null)
     }
     pub fn as_str(&self) -> Option<&str> {
         match self {

@@ -5,10 +5,8 @@ use crate::value::JsonValue;
 type Result<T> = std::result::Result<T, JsonError>;
 
 pub fn parse_json(input: &str) -> Result<JsonValue> {
-    // Step 1: tokenize. The ? propagates any JsonError from tokenize.
     let tokens = tokenize(input)?;
-
-    // Step 2: handle empty input.
+    
     if tokens.is_empty() {
         return Err(JsonError::UnexpectedEndOfInput {
             expected: "JSON value".to_string(),
@@ -16,10 +14,10 @@ pub fn parse_json(input: &str) -> Result<JsonValue> {
         });
     }
 
-    match tokens[0].clone() {
-        Token::String(s) => Ok(JsonValue::Text(s)),
-        Token::Number(n) => Ok(JsonValue::Number(n)),
-        Token::Boolean(b) => Ok(JsonValue::Boolean(b)),
+    match &tokens[0] {
+        Token::String(s) => Ok(JsonValue::Text(s.clone())),
+        Token::Number(n) => Ok(JsonValue::Number(*n)),
+        Token::Boolean(b) => Ok(JsonValue::Boolean(*b)),
         Token::Null => Ok(JsonValue::Null),
         other => Err(JsonError::UnexpectedToken {
             expected: "JSON value (string, number, boolean, or null)".to_string(),
@@ -28,6 +26,7 @@ pub fn parse_json(input: &str) -> Result<JsonValue> {
         }),
     }
 }
+
 
 #[cfg(test)]
 mod tests {
