@@ -47,7 +47,7 @@ JsonValue::Text(String)
 ## Usage
 
 ```rust
-use rust_json_parser::parser::parse_json;
+use rust_json_parser::parse_json;
 
 fn main() {
     let value = parse_json(r#""hello world""#).unwrap();
