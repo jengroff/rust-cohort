@@ -6,7 +6,7 @@ type Result<T> = std::result::Result<T, JsonError>;
 
 pub fn parse_json(input: &str) -> Result<JsonValue> {
     let tokens = tokenize(input)?;
-    
+
     if tokens.is_empty() {
         return Err(JsonError::UnexpectedEndOfInput {
             expected: "JSON value".to_string(),
@@ -26,7 +26,6 @@ pub fn parse_json(input: &str) -> Result<JsonValue> {
         }),
     }
 }
-
 
 #[cfg(test)]
 mod tests {

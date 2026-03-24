@@ -1,5 +1,4 @@
-use rust_json_parser::{parse_json, JsonError};
-
+use rust_json_parser::{JsonError, parse_json};
 
 fn main() -> Result<(), JsonError> {
     let json_string = r#"{
