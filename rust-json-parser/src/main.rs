@@ -21,8 +21,7 @@ fn main() {
 
 // Helper function
 fn parse_and_print(input: &str) {
-    let result = JsonParser::new(input)
-        .and_then(|mut p| p.parse());
+    let result = JsonParser::new(input).and_then(|mut p| p.parse());
     match result {
         Ok(value) => println!("Parsed: {:?}", value),
         Err(e) => println!("Error: {}", e),
