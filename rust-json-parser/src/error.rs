@@ -73,31 +73,31 @@ impl fmt::Display for JsonError {
 
 impl std::error::Error for JsonError {}
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     #[test]
-//     fn test_invalid_escape_display() {
-//         let err = JsonError::InvalidEscape { char: 'q', position: 5 };
-//         let msg = format!("{}", err);
-//         assert!(msg.contains("escape"));
-//         assert!(msg.contains("q"));
-//     }
+    #[test]
+    fn test_invalid_escape_display() {
+        let err = JsonError::InvalidEscape { ch: 'q', position: 5 };
+        let msg = format!("{}", err);
+        assert!(msg.contains("escape"));
+        assert!(msg.contains("q"));
+    }
 
-//     #[test]
-//     fn test_invalid_unicode_display() {
-//         let err = JsonError::InvalidUnicode {
-//             sequence: "00GG".to_string(),
-//             position: 3
-//         };
-//         let msg = format!("{}", err);
-//         assert!(msg.contains("unicode") || msg.contains("Unicode"));
-//     }
+    #[test]
+    fn test_invalid_unicode_display() {
+        let err = JsonError::InvalidUnicode {
+            sequence: "00GG".to_string(),
+            position: 3
+        };
+        let msg = format!("{}", err);
+        assert!(msg.contains("unicode") || msg.contains("Unicode"));
+    }
 
-//     #[test]
-//     fn test_error_is_std_error() {
-//         let err = JsonError::InvalidEscape { char: 'x', position: 0 };
-//         let _: &dyn std::error::Error = &err;  // Must implement Error trait
-//     }
-// }
+    #[test]
+    fn test_error_is_std_error() {
+        let err = JsonError::InvalidEscape { ch: 'x', position: 0 };
+        let _: &dyn std::error::Error = &err;  // Must implement Error trait
+    }
+}

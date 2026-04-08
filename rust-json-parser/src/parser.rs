@@ -60,17 +60,50 @@ impl JsonParser {
     // Same pattern as Tokenizer's helpers but operating on tokens instead
     // of characters.
     //
+    // rewriting this function per Jim's suggestion to simplify the logic:
+    //
+    // Rewrite #1 (function) -------------------------------------------------
+    // fn advance(&mut self) -> Option<Token> {
+    //     let token = self.tokens.get(self.position).cloned();
+
+    //         if let Some(_) = &token {
+    //             self.position += 1;
+    //         }
+    //         token
+    // }
+    // Rewrite #1 (explanation)
+        // let token = self.tokens.get(self.position) -> safely indexes into Vec<Token> at self.position
+        //     and returns Option<&Token> (a borrow / reference to the token), or None (if OOB).
+        //
+        // .cloned()  -> converts Option<&Token> into Option<Token> by cloning the inner value, b/c 
+        //     we need to have an owned copy, not a reference. 
+        // 
+        // if let Some(_) -> I don't care about the token's actual value, just need to know it exists 
+        //    in order to increment the position; therefore I can use _ in Some(_) to say "I don't care 
+        //    what's inside, just check that it's Some
+        // 
+        // also don't need a final else clause b/c get() already returns None when OOB.
+    // ---------------------------------------------------------------------------
+
+    // Rewrite #2 (within inline comments) -> 
+    // because Rewrite #2 threw a warning -->  #[warn(clippy::redundant_pattern_matching)] :-(
+    //  
     fn advance(&mut self) -> Option<Token> {
-        if self.position < self.tokens.len() {
-            let token = self.tokens.get(self.position).cloned();
-            if token.is_some() {
+        match self.tokens.get(self.position).cloned() {
+            // Using match to handle both cases explicitly:
+            //    Some(token) -> there is a token at that position; binds it to token (unlike _), 
+            //    then increments the position, then rewraps it in Some(token) to return it. 
+            Some(token) => {
                 self.position += 1;
+                Some(token)
             }
-            token
-        } else {
-            None
+            None => None,
+            // None -> OOB, just pass None through
         }
+        // key difference from the rewrite #1 version -> match forces me to handle every 
+        // case, necessitating the explicit None => None arm. 
     }
+
     fn is_at_end(&self) -> bool {
         self.position >= self.tokens.len()
     }
