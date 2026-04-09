@@ -72,27 +72,27 @@ impl JsonParser {
     //         token
     // }
     // Rewrite #1 (explanation)
-        // let token = self.tokens.get(self.position) -> safely indexes into Vec<Token> at self.position
-        //     and returns Option<&Token> (a borrow / reference to the token), or None (if OOB).
-        //
-        // .cloned()  -> converts Option<&Token> into Option<Token> by cloning the inner value, b/c 
-        //     we need to have an owned copy, not a reference. 
-        // 
-        // if let Some(_) -> I don't care about the token's actual value, just need to know it exists 
-        //    in order to increment the position; therefore I can use _ in Some(_) to say "I don't care 
-        //    what's inside, just check that it's Some
-        // 
-        // also don't need a final else clause b/c get() already returns None when OOB.
+    // let token = self.tokens.get(self.position) -> safely indexes into Vec<Token> at self.position
+    //     and returns Option<&Token> (a borrow / reference to the token), or None (if OOB).
+    //
+    // .cloned()  -> converts Option<&Token> into Option<Token> by cloning the inner value, b/c
+    //     we need to have an owned copy, not a reference.
+    //
+    // if let Some(_) -> I don't care about the token's actual value, just need to know it exists
+    //    in order to increment the position; therefore I can use _ in Some(_) to say "I don't care
+    //    what's inside, just check that it's Some
+    //
+    // also don't need a final else clause b/c get() already returns None when OOB.
     // ---------------------------------------------------------------------------
 
-    // Rewrite #2 (within inline comments) -> 
+    // Rewrite #2 (within inline comments) ->
     // because Rewrite #2 threw a warning -->  #[warn(clippy::redundant_pattern_matching)] :-(
-    //  
+    //
     fn advance(&mut self) -> Option<Token> {
         match self.tokens.get(self.position).cloned() {
             // Using match to handle both cases explicitly:
-            //    Some(token) -> there is a token at that position; binds it to token (unlike _), 
-            //    then increments the position, then rewraps it in Some(token) to return it. 
+            //    Some(token) -> there is a token at that position; binds it to token (unlike _),
+            //    then increments the position, then rewraps it in Some(token) to return it.
             Some(token) => {
                 self.position += 1;
                 Some(token)
@@ -100,8 +100,8 @@ impl JsonParser {
             None => None,
             // None -> OOB, just pass None through
         }
-        // key difference from the rewrite #1 version -> match forces me to handle every 
-        // case, necessitating the explicit None => None arm. 
+        // key difference from the rewrite #1 version -> match forces me to handle every
+        // case, necessitating the explicit None => None arm.
     }
 
     fn is_at_end(&self) -> bool {
