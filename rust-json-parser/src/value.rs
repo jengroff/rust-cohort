@@ -1,7 +1,6 @@
+use crate::parser::JsonParser;
 use std::collections::HashMap;
 use std::fmt;
-use crate::parser::JsonParser;
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum JsonValue {
@@ -174,10 +173,7 @@ mod display_tests {
 
     #[test]
     fn test_display_array() {
-        let value = JsonValue::Array(vec![
-            JsonValue::Number(1.0),
-            JsonValue::Number(2.0),
-        ]);
+        let value = JsonValue::Array(vec![JsonValue::Number(1.0), JsonValue::Number(2.0)]);
         assert_eq!(value.to_string(), "[1,2]");
     }
 
@@ -202,7 +198,10 @@ mod display_tests {
     #[test]
     #[ignore]
     fn test_display_nested() {
-        let value = JsonParser::new(r#"{"arr": [1, 2]}"#).unwrap().parse().unwrap();
+        let value = JsonParser::new(r#"{"arr": [1, 2]}"#)
+            .unwrap()
+            .parse()
+            .unwrap();
         let output = value.to_string();
         assert!(output.contains("\"arr\""));
         assert!(output.contains("[1,2]"));
@@ -210,9 +209,10 @@ mod display_tests {
 
     #[test]
     fn test_display_nested_array() {
-        let value = JsonValue::Array(vec![
-            JsonValue::Array(vec![JsonValue::Number(1.0), JsonValue::Number(2.0)])
-        ]);
+        let value = JsonValue::Array(vec![JsonValue::Array(vec![
+            JsonValue::Number(1.0),
+            JsonValue::Number(2.0),
+        ])]);
         assert_eq!(value.to_string(), "[[1,2]]");
     }
 }
