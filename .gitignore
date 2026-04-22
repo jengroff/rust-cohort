@@ -8,3 +8,43 @@ rust-cohort.code-workspace
 
 .claude/
 *.claude
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.eggs/
+*.egg
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+
+.venv/
+venv/
+env/
+
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+*.xlsx.tmp
+*.swp
+*.swo
+*~
+
+
+.env
+.env.local
+.env.*.local
+
+*.so
+*.pyd
+*.dylib

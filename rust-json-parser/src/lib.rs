@@ -5,3 +5,6 @@ pub mod value;
 pub use error::JsonError;
 pub use parser::JsonParser;
 pub use value::JsonValue;
+
+#[cfg(feature = "python")]
+mod python_bindings;
