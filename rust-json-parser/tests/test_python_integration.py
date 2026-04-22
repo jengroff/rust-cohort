@@ -16,10 +16,10 @@ class TestBasicParsing:
             '{"str": "hello", "num": 42, "bool": true, "null": null, "arr": [1,2], "obj": {}}'
         )
         assert result["str"] == "hello"
-        assert result["num"] == 42.0
+        assert result["num"] == 42
         assert result["bool"] is True
         assert result["null"] is None
-        assert result["arr"] == [1.0, 2.0]
+        assert result["arr"] == [1, 2]
         assert result["obj"] == {}
 
 class TestTypeConversions:
@@ -33,10 +33,21 @@ class TestTypeConversions:
         assert result["f"] is False
         assert isinstance(result["t"], bool)
 
-    def test_numbers_are_float(self):
+    def test_number_types_match_json_loads(self):
+        # Integer literals → int, floats → float. Matches json.loads so
+        # our parser can be swapped in without type-checking callers
+        # getting surprised.
         result = parse_json('{"int": 42, "float": 3.14}')
-        assert result["int"] == 42.0
+        assert result["int"] == 42
+        assert isinstance(result["int"], int)
         assert result["float"] == 3.14
+        assert isinstance(result["float"], float)
+
+    def test_big_int_falls_back_to_float(self):
+        # i64 overflow falls back to float — json.loads would return a
+        # bigint here; float is close enough for the scope of this parser.
+        result = parse_json('{"big": 12345678901234567890}')
+        assert isinstance(result["big"], float)
 
 class TestErrorHandling:
     def test_parse_error_raises_value_error(self):

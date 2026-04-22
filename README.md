@@ -119,7 +119,7 @@ The same parser is also exposed as a Python package. Rust values become native P
 import rust_json_parser as rjp
 
 rjp.parse_json('{"name": "Alice", "age": 30}')
-# {'name': 'Alice', 'age': 30.0}
+# {'name': 'Alice', 'age': 30}
 
 rjp.parse_json_file("data.json")
 # same shape, read from disk
@@ -141,17 +141,23 @@ python -m rust_json_parser --benchmark
 
 ## Benchmarks
 
-`benchmark_performance(json_str, iterations=1000)` times three parsers on the same input and returns the total elapsed seconds for each: this crate's `parse_json`, Python's built-in `json.loads` (C implementation), and `simplejson.loads` (pure Python).
+`benchmark_performance(json_str, iterations=1000)` times three parsers on the same input and returns the total elapsed seconds for each: this crate's `parse_json` (Python-facing, builds a `dict`/`list` tree directly), Python's built-in `json.loads` (C implementation), and `simplejson.loads` (pure Python).
 
 Results from `python -m rust_json_parser --benchmark` on a recent run (1000 iterations per size):
 
 | Input size | Rust | `json` (C) | `simplejson` | Rust vs `json` |
 |---|---|---|---|---|
-| Small (25 B) | 0.000559s | 0.000833s | 0.000810s | **1.49× faster** |
-| Medium (2,991 B) | 0.079735s | 0.022997s | 0.021630s | 0.29× (3.5× slower) |
-| Large (65,791 B) | 0.954715s | 0.437346s | 0.511625s | 0.46× (2.2× slower) |
+| Small (25 B) | 0.000183s | 0.001168s | 0.001445s | **6.37× faster** |
+| Medium (2,991 B) | 0.021563s | 0.035678s | 0.030083s | **1.65× faster** |
+| Large (65,791 B) | 0.485438s | 0.727906s | 0.659860s | **1.50× faster** |
 
-The Rust parser wins on tiny inputs where FFI overhead dominates, but loses on real-world payloads — CPython's `json` module is a heavily-tuned C parser, and this implementation still pays the cost of a `Vec<Token>` materialisation pass plus a full Rust→Python conversion of every value. The numbers are a useful starting point for profiling, not a claim of production-readiness.
+Numbers are a rough snapshot on one machine; run the benchmark locally for apples-to-apples. Three changes drove the medium/large wins over the first cut of this parser:
+
+1. **Single-pass streaming parser.** The original tokenizer materialised a `Vec<Token>` before the parser started. `src/stream.rs` merges lex and parse into one recursive descent over the raw `&[u8]`, so thousands of `Token::String(String)` allocations disappear on big inputs.
+2. **`memchr` + `FxHashMap`.** Inner loops that scan string bodies for `"` or `\` now use `memchr::memchr2` (SIMD-accelerated). Object parsing switched from `std::HashMap` (SipHash) to `rustc_hash::FxHashMap`, which is ≈3–5× faster for the short, trusted keys we're inserting.
+3. **Direct Rust → Python builder.** The Python-facing `parse_json` used to parse to `JsonValue` and then walk that tree a second time to produce a `dict`. `src/python_bindings.rs::py_stream` collapses that into one pass: `PyDict::new`/`PyList::append`/`PyString::new` are called inline during parsing, so the entire `JsonValue` allocation + traversal drops out. Integer literals are returned as `int` (not `float`) to match `json.loads` and hit CPython's small-int cache.
+
+The pure-Rust `crate::parser::parse_json` (returning `JsonValue`) and the `tokenizer`/`JsonParser` two-pass classroom version are kept for pedagogy and are still tested — they're just no longer on the hot path.
 
 ## Building
 
@@ -181,11 +187,12 @@ rust-json-parser/
   src/
     lib.rs                          # library root; gates python_bindings
     main.rs                         # rust binary entry point
-    tokenizer.rs                    # Tokenizer struct and Token enum
-    value.rs                        # JsonValue enum + accessors + Display
+    tokenizer.rs                    # Tokenizer struct and Token enum (classroom pass)
+    value.rs                        # JsonValue + JsonObject (FxHashMap) + Display
     error.rs                        # JsonError enum with Display impl
-    parser.rs                       # JsonParser (recursive descent)
-    python_bindings.rs              # PyO3 bridge (IntoPyObject, From<JsonError>)
+    parser.rs                       # JsonParser two-pass (classroom); parse_json → stream
+    stream.rs                       # single-pass streaming parser over &[u8] — the fast path
+    python_bindings.rs              # PyO3 bridge + py_stream direct Rust→Python parser
   python/
     rust_json_parser/
       __init__.py                   # re-exports from the compiled extension
