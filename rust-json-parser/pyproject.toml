@@ -6,6 +6,9 @@ build-backend = "maturin"
 name = "rust-json-parser"
 version = "0.1.0"
 requires-python = ">=3.12"
+dependencies = [
+    "simplejson>=3.19.0",
+]
 
 [tool.maturin]
 python-source = "python"

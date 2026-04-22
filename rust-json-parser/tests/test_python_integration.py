@@ -63,3 +63,23 @@ class TestSerialization:
     def test_dumps_with_indent(self):
         result = dumps({"key": "value"}, indent=2)
         assert '\n' in result
+
+
+class TestBenchmark:
+    def test_benchmark_returns_three_floats(self):
+        from rust_json_parser import benchmark_performance
+        rust_t, json_t, simplejson_t = benchmark_performance(
+            '{"test": 1}', iterations=10
+        )
+        assert isinstance(rust_t, float)
+        assert isinstance(json_t, float)
+        assert isinstance(simplejson_t, float)
+        assert rust_t > 0
+        assert json_t > 0
+        assert simplejson_t > 0
+
+    def test_benchmark_default_iterations(self):
+        from rust_json_parser import benchmark_performance
+        # No iterations kwarg — should use the default of 1000
+        result = benchmark_performance('{"key": "value"}')
+        assert len(result) == 3

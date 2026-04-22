@@ -4,16 +4,59 @@ use crate::error::JsonError;
 use crate::tokenizer::{Token, Tokenizer};
 use crate::value::JsonValue;
 
+/// Parses a JSON string and returns a [`JsonValue`].
+///
+/// This is the convenience entry point — it constructs a [`JsonParser`]
+/// internally and runs it to completion. For streaming or multi-pass use
+/// cases, construct [`JsonParser`] yourself.
+///
+/// # Examples
+///
+/// ```
+/// use rust_json_parser::{parse_json, JsonValue};
+///
+/// let value = parse_json(r#"{"arr": [1, 2, 3]}"#)?;
+/// assert_eq!(
+///     value.get("arr").and_then(|v| v.as_array()).map(|a| a.len()),
+///     Some(3)
+/// );
+/// # Ok::<(), rust_json_parser::JsonError>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns [`JsonError`] if the input is not valid JSON. Each error variant
+/// carries a byte `position` pointing at the offending location.
+///
+/// - [`JsonError::UnexpectedToken`] — grammar violation (e.g. missing comma).
+/// - [`JsonError::UnexpectedEndOfInput`] — truncated input (unclosed `{`).
+/// - [`JsonError::InvalidNumber`] — malformed number literal.
+/// - [`JsonError::InvalidEscape`] / [`JsonError::InvalidUnicode`] —
+///   bad string escape.
+pub fn parse_json(input: &str) -> Result<JsonValue, JsonError> {
+    let mut parser = JsonParser::new(input)?;
+    parser.parse()
+}
+
+
+/// A stateful JSON parser holding the full token stream.
+///
+/// Usually you want [`parse_json`] instead — it handles construction for you.
+/// Use `JsonParser` directly when you need access to the intermediate token
+/// state or want to run the parse in multiple steps.
 pub struct JsonParser {
     tokens: Vec<Token>,
     position: usize,
 }
 
 impl JsonParser {
-    //
-    // Returns Result<Self, JsonError> because tokenization can fail.
-    // This is different from Tokenizer::new() which was infallible, like Superman.
-    //
+    /// Tokenizes `input` and returns a parser positioned at the start of
+    /// the token stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonError`] if tokenization fails (bad escape, bad number,
+    /// etc.). Grammar errors only surface later, during [`Self::parse`].
     pub fn new(input: &str) -> Result<Self, JsonError> {
         let mut tokenizer = Tokenizer::new(input);
         let tokens = tokenizer.tokenize()?;
@@ -27,6 +70,7 @@ impl JsonParser {
     //
     // Thin public wrapper that delegates to the internal recursive dispatcher.
     //
+    /// Parse the token stream into a single [`JsonValue`].
     pub fn parse(&mut self) -> Result<JsonValue, JsonError> {
         self.parse_value()
     }
@@ -287,11 +331,6 @@ impl JsonParser {
             }),
         }
     }
-}
-
-pub fn parse_json(input: &str) -> Result<JsonValue, JsonError> {
-    let mut parser = JsonParser::new(input)?;
-    parser.parse()
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

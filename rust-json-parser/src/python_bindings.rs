@@ -1,6 +1,59 @@
 use crate::{JsonError, JsonValue};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
+use std::time::Instant;
+
+/// Times three JSON parsers on the same input and returns their elapsed
+/// durations in seconds.
+///
+/// Returns a tuple `(rust_seconds, json_seconds, simplejson_seconds)`:
+/// - `rust_seconds` — this crate's [`parse_json`](crate::parse_json)
+/// - `json_seconds` — Python's built-in `json.loads` (C implementation)
+/// - `simplejson_seconds` — `simplejson.loads` (pure Python)
+///
+/// Each parser is run `iterations` times; the returned duration is the
+/// *total* elapsed time for all iterations, not the per-iteration time.
+#[pyfunction]
+#[pyo3(signature = (json_str, iterations = 1000))]
+fn benchmark_performance<'py>(
+    py: Python<'py>,
+    json_str: &str,
+    iterations: usize,
+) -> PyResult<(f64, f64, f64)> {
+    // ---- Rust parser ----
+    let rust_duration = {
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ = crate::parser::parse_json(json_str)?;
+        }
+        start.elapsed().as_secs_f64()
+    };
+
+    // ---- Python json (C implementation) ----
+    let json_duration = {
+        let json_module = py.import("json")?;
+        let json_loads = json_module.getattr("loads")?;
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ = json_loads.call1((json_str,))?;
+        }
+        start.elapsed().as_secs_f64()
+    };
+
+    // ---- simplejson (pure Python) ----
+    let simplejson_duration = {
+        let simplejson_module = py.import("simplejson")?;
+        let simplejson_loads = simplejson_module.getattr("loads")?;
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ = simplejson_loads.call1((json_str,))?;
+        }
+        start.elapsed().as_secs_f64()
+    };
+
+    Ok((rust_duration, json_duration, simplejson_duration))
+}
+
 
 //
 // IntoPyObject is the trait that teaches PyO3 how to convert my Rust type
@@ -224,5 +277,6 @@ fn _rust_json_parser(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_json, m)?)?;
     m.add_function(wrap_pyfunction!(parse_json_file, m)?)?;
     m.add_function(wrap_pyfunction!(dumps, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_performance, m)?)?; // NEW
     Ok(())
 }

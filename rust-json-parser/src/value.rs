@@ -1,13 +1,48 @@
 use std::collections::HashMap;
 use std::fmt;
 
+/// A parsed JSON value.
+///
+/// JSON has six types, and this enum has one variant per type. All container
+/// variants own their contents — `Array` owns its `Vec`, `Object` owns its
+/// `HashMap` keys and values.
+///
+/// # Examples
+///
+/// Constructing a value directly:
+///
+/// ```
+/// use rust_json_parser::JsonValue;
+///
+/// let v = JsonValue::Number(42.0);
+/// assert_eq!(v.as_f64(), Some(42.0));
+/// ```
+///
+/// Parsing from text:
+///
+/// ```
+/// use rust_json_parser::{parse_json, JsonValue};
+///
+/// let v = parse_json(r#"[1, 2, 3]"#)?;
+/// assert_eq!(v.as_array().map(|a| a.len()), Some(3));
+/// # Ok::<(), rust_json_parser::JsonError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum JsonValue {
+    /// JSON `null` — the absence of a value.
     Null,
+    /// JSON `true` or `false`.
     Boolean(bool),
+    /// JSON number. All numbers (integer or float) are stored as `f64`;
+    /// JSON itself doesn't distinguish int from float.
     Number(f64),
+    /// JSON string, unescaped. Escape sequences like `\n` and `\uXXXX`
+    /// have already been expanded during tokenization.
     Text(String),
+    /// JSON array — an ordered, heterogeneously-typed list.
     Array(Vec<JsonValue>),
+    /// JSON object — an unordered map from string keys to values.
+    /// Duplicate keys: last-wins, matching `json.loads` behaviour in Python.
     Object(HashMap<String, JsonValue>),
 }
 
@@ -20,10 +55,12 @@ pub enum JsonValue {
 //
 
 impl JsonValue {
+    /// Returns `true` if this value is [`JsonValue::Null`].
     pub fn is_null(&self) -> bool {
         matches!(self, JsonValue::Null)
     }
 
+    /// Returns the inner `bool` if this is a [`JsonValue::Boolean`], else `None`.
     pub fn as_bool(&self) -> Option<bool> {
         match *self {
             JsonValue::Boolean(b) => Some(b),
@@ -31,6 +68,7 @@ impl JsonValue {
         }
     }
 
+    /// Returns the inner `f64` if this is a [`JsonValue::Number`], else `None`.
     pub fn as_f64(&self) -> Option<f64> {
         match *self {
             JsonValue::Number(n) => Some(n),
@@ -38,6 +76,7 @@ impl JsonValue {
         }
     }
 
+    /// Returns the inner string slice if this is a [`JsonValue::Text`], else `None`.
     pub fn as_str(&self) -> Option<&str> {
         match self {
             JsonValue::Text(s) => Some(s),
@@ -51,6 +90,7 @@ impl JsonValue {
     // I think it means "give me a view into the data if the type is
     // right, otherwise None."
     //
+    /// Returns a borrowed view of the inner vector if this is a [`JsonValue::Array`], else `None`.
     pub fn as_array(&self) -> Option<&Vec<JsonValue>> {
         match self {
             JsonValue::Array(arr) => Some(arr),
@@ -58,6 +98,7 @@ impl JsonValue {
         }
     }
 
+    /// Returns a borrowed view of the inner map if this is a [`JsonValue::Object`], else `None`.
     pub fn as_object(&self) -> Option<&HashMap<String, JsonValue>> {
         match self {
             JsonValue::Object(obj) => Some(obj),
@@ -70,6 +111,8 @@ impl JsonValue {
     //   isinstance(val, dict)
     // but collapsed into one pithy call that returns None on mismatch
 
+    /// Look up `key` in an object. Returns `None` if this isn't an object
+    /// or the key is absent.
     pub fn get(&self, key: &str) -> Option<&JsonValue> {
         match self {
             JsonValue::Object(obj) => obj.get(key),
@@ -81,6 +124,8 @@ impl JsonValue {
     // version, unlike get_index(i) which would panic if OOB. Seems similar to
     // Python's get() method for dict.
 
+    /// Index into an array. Returns `None` if this isn't an array or the
+    /// index is out of bounds.
     pub fn get_index(&self, index: usize) -> Option<&JsonValue> {
         match self {
             JsonValue::Array(arr) => arr.get(index),

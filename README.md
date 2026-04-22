@@ -78,15 +78,24 @@ JsonError::InvalidUnicode { sequence, position }
 
 ## Usage
 
+The top-level `parse_json` function is the convenience entry point:
+
+```rust
+use rust_json_parser::{parse_json, JsonValue};
+
+fn main() {
+    let value = parse_json(r#"{"name": "Alice", "age": 30}"#).unwrap();
+    assert_eq!(value.get("name"), Some(&JsonValue::Text("Alice".to_string())));
+}
+```
+
+For multi-step use (inspecting the token stream, reusing parser state), construct `JsonParser` directly:
+
 ```rust
 use rust_json_parser::parser::JsonParser;
 
-fn main() {
-    // Parse a JSON primitive
-    let mut parser = JsonParser::new(r#""hello world""#).unwrap();
-    let value = parser.parse().unwrap();
-    println!("{:?}", value); // Text("hello world")
-}
+let mut parser = JsonParser::new(r#""hello world""#).unwrap();
+let value = parser.parse().unwrap();
 ```
 
 You can also use the `Tokenizer` directly:
@@ -117,6 +126,9 @@ rjp.parse_json_file("data.json")
 
 rjp.dumps({"key": "value"})
 # '{"key":"value"}'
+
+rjp.benchmark_performance('{"key": "value"}', iterations=1000)
+# (rust_seconds, json_seconds, simplejson_seconds)
 ```
 
 A `__main__` entry point lets you pretty-run from the shell:
@@ -124,7 +136,22 @@ A `__main__` entry point lets you pretty-run from the shell:
 ```bash
 python -m rust_json_parser '{"hello": "world"}'
 python -m rust_json_parser path/to/file.json
+python -m rust_json_parser --benchmark
 ```
+
+## Benchmarks
+
+`benchmark_performance(json_str, iterations=1000)` times three parsers on the same input and returns the total elapsed seconds for each: this crate's `parse_json`, Python's built-in `json.loads` (C implementation), and `simplejson.loads` (pure Python).
+
+Results from `python -m rust_json_parser --benchmark` on a recent run (1000 iterations per size):
+
+| Input size | Rust | `json` (C) | `simplejson` | Rust vs `json` |
+|---|---|---|---|---|
+| Small (25 B) | 0.000559s | 0.000833s | 0.000810s | **1.49× faster** |
+| Medium (2,991 B) | 0.079735s | 0.022997s | 0.021630s | 0.29× (3.5× slower) |
+| Large (65,791 B) | 0.954715s | 0.437346s | 0.511625s | 0.46× (2.2× slower) |
+
+The Rust parser wins on tiny inputs where FFI overhead dominates, but loses on real-world payloads — CPython's `json` module is a heavily-tuned C parser, and this implementation still pays the cost of a `Vec<Token>` materialisation pass plus a full Rust→Python conversion of every value. The numbers are a useful starting point for profiling, not a claim of production-readiness.
 
 ## Building
 
@@ -142,6 +169,8 @@ pytest tests/test_python_integration.py
 `maturin develop` is the Python equivalent of `cargo build` + `pip install -e .` — it compiles the Rust cdylib, packages it with the pure-Python wrapper in `python/rust_json_parser/`, and installs the result so `import rust_json_parser` just works.
 
 The `python` Cargo feature is on by default. Turn it off (`--no-default-features`) when running pure-Rust tests so you don't need Python headers on the build host.
+
+API docs are inline rustdoc; browse them with `cargo doc --open --no-default-features`.
 
 ## Project structure
 

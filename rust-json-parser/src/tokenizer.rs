@@ -1,16 +1,27 @@
 use crate::error::JsonError;
 
+/// A single JSON lexeme emitted by [`Tokenizer::tokenize`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
+    /// `{`
     LeftBrace,
+    /// `}`
     RightBrace,
+    /// `[`
     LeftBracket,
+    /// `]`
     RightBracket,
+    /// `,`
     Comma,
+    /// `:`
     Colon,
+    /// A string literal with escapes already resolved.
     String(String),
+    /// A numeric literal parsed into an `f64`.
     Number(f64),
+    /// `true` or `false`.
     Boolean(bool),
+    /// `null`.
     Null,
 }
 
@@ -20,6 +31,7 @@ pub enum Token {
 // -------- THE STRUCT ---------------------------
 // Tokenizer itself is public but its attributes are private
 //
+/// Lexer that converts a JSON string into a stream of [`Token`]s.
 pub struct Tokenizer {
     input: Vec<char>,
     position: usize,
@@ -29,6 +41,8 @@ impl Tokenizer {
     // Everything inside this is either a method (takes self)
     // or an associated function (no self) - kind of like @classmethod.
     //
+    /// Build a new `Tokenizer` over `input`. The input is copied into an
+    /// owned `Vec<char>` so the caller can drop their string afterwards.
     pub fn new(input: &str) -> Self {
         // Self = Tokenizer; type of alias?
         // parameter type is `input: &str` because we are borrowing
@@ -50,6 +64,8 @@ impl Tokenizer {
     // Returns Result<Vec<Token>, JsonError> — like before except
     // the logic lives inside a method instead of a free function.
     //
+    /// Consume the input and return the full token stream, or a [`JsonError`]
+    /// at the first lexical problem.
     pub fn tokenize(&mut self) -> Result<Vec<Token>, JsonError> {
         let mut tokens = Vec::new();
         loop {
