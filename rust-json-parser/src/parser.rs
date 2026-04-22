@@ -215,62 +215,77 @@ impl JsonParser {
         let mut map = HashMap::new();
 
         loop {
-            let key_token = self.advance().ok_or(JsonError::UnexpectedEndOfInput {
-                expected: "string key".to_string(),
-                position: self.position,
-            })?;
-            let key = match key_token {
-                Token::String(s) => s,
-                other => {
-                    return Err(JsonError::UnexpectedToken {
-                        expected: "string key".to_string(),
-                        found: format!("{:?}", other),
-                        position: self.position,
-                    });
-                }
-            };
-
-            let colon = self.advance().ok_or(JsonError::UnexpectedEndOfInput {
-                expected: ":".to_string(),
-                position: self.position,
-            })?;
-            if !matches!(colon, Token::Colon) {
-                return Err(JsonError::UnexpectedToken {
-                    expected: ":".to_string(),
-                    found: format!("{:?}", colon),
-                    position: self.position,
-                });
-            }
-
+            let key = self.parse_object_key()?;
+            self.expect_colon()?;
             let value = self.parse_value()?;
             map.insert(key, value);
 
-            let token = self.advance().ok_or(JsonError::UnexpectedEndOfInput {
-                expected: "} or ,".to_string(),
-                position: self.position,
-            })?;
-            match token {
-                Token::RightBrace => break,
-                Token::Comma => {
-                    if self.check(&Token::RightBrace) {
-                        return Err(JsonError::UnexpectedToken {
-                            expected: "string key".to_string(),
-                            found: "}".to_string(),
-                            position: self.position,
-                        });
-                    }
-                }
-                other => {
-                    return Err(JsonError::UnexpectedToken {
-                        expected: ", or }".to_string(),
-                        found: format!("{:?}", other),
-                        position: self.position,
-                    });
-                }
+            if self.finish_pair_or_continue()? {
+                break;
             }
         }
 
         Ok(JsonValue::Object(map))
+    }
+
+    // Consumes one token, requires it to be a string, returns the owned key.
+    fn parse_object_key(&mut self) -> Result<String, JsonError> {
+        let token = self.advance().ok_or(JsonError::UnexpectedEndOfInput {
+            expected: "string key".to_string(),
+            position: self.position,
+        })?;
+        match token {
+            Token::String(s) => Ok(s),
+            other => Err(JsonError::UnexpectedToken {
+                expected: "string key".to_string(),
+                found: format!("{:?}", other),
+                position: self.position,
+            }),
+        }
+    }
+
+    // Consumes the `:` that separates key from value.
+    fn expect_colon(&mut self) -> Result<(), JsonError> {
+        let token = self.advance().ok_or(JsonError::UnexpectedEndOfInput {
+            expected: ":".to_string(),
+            position: self.position,
+        })?;
+        if matches!(token, Token::Colon) {
+            Ok(())
+        } else {
+            Err(JsonError::UnexpectedToken {
+                expected: ":".to_string(),
+                found: format!("{:?}", token),
+                position: self.position,
+            })
+        }
+    }
+
+    // After a key/value pair, consume either `}` (return true = done) or `,`
+    // (return false = another pair expected). Rejects trailing commas.
+    fn finish_pair_or_continue(&mut self) -> Result<bool, JsonError> {
+        let token = self.advance().ok_or(JsonError::UnexpectedEndOfInput {
+            expected: "} or ,".to_string(),
+            position: self.position,
+        })?;
+        match token {
+            Token::RightBrace => Ok(true),
+            Token::Comma => {
+                if self.check(&Token::RightBrace) {
+                    return Err(JsonError::UnexpectedToken {
+                        expected: "string key".to_string(),
+                        found: "}".to_string(),
+                        position: self.position,
+                    });
+                }
+                Ok(false)
+            }
+            other => Err(JsonError::UnexpectedToken {
+                expected: ", or }".to_string(),
+                found: format!("{:?}", other),
+                position: self.position,
+            }),
+        }
     }
 }
 
