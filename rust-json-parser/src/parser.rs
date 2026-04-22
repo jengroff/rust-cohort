@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
 use crate::error::JsonError;
 use crate::tokenizer::{Token, Tokenizer};
-use crate::value::JsonValue;
+use crate::value::{JsonObject, JsonValue};
 
 /// Parses a JSON string and returns a [`JsonValue`].
 ///
@@ -34,8 +32,12 @@ use crate::value::JsonValue;
 /// - [`JsonError::InvalidEscape`] / [`JsonError::InvalidUnicode`] —
 ///   bad string escape.
 pub fn parse_json(input: &str) -> Result<JsonValue, JsonError> {
-    let mut parser = JsonParser::new(input)?;
-    parser.parse()
+    // Delegates to the single-pass [`crate::stream`] parser. The old
+    // two-pass [`JsonParser`] is preserved unchanged for educational
+    // purposes and its tests, but the stream parser is materially faster
+    // because it avoids the intermediate `Vec<Token>` and uses memchr for
+    // string scanning.
+    crate::stream::parse(input)
 }
 
 
@@ -249,10 +251,10 @@ impl JsonParser {
 
         if self.check(&Token::RightBrace) {
             self.advance();
-            return Ok(JsonValue::Object(HashMap::new()));
+            return Ok(JsonValue::Object(JsonObject::default()));
         }
 
-        let mut map = HashMap::new();
+        let mut map = JsonObject::default();
 
         loop {
             let key = self.parse_object_key()?;
@@ -413,13 +415,13 @@ mod object_tests {
     #[test]
     fn test_parse_empty_object() {
         let value = parse_json("{}").unwrap();
-        assert_eq!(value, JsonValue::Object(HashMap::new()));
+        assert_eq!(value, JsonValue::Object(JsonObject::default()));
     }
 
     #[test]
     fn test_parse_object_single_key() {
         let value = parse_json(r#"{"key": "value"}"#).unwrap();
-        let mut expected = HashMap::new();
+        let mut expected = JsonObject::default();
         expected.insert("key".to_string(), JsonValue::Text("value".to_string()));
         assert_eq!(value, JsonValue::Object(expected));
     }

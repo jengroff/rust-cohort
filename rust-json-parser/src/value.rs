@@ -1,11 +1,19 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::fmt;
+
+/// Hash map used for [`JsonValue::Object`].
+///
+/// Uses `rustc-hash`'s `FxHash` instead of the standard library's default
+/// `SipHash` hasher. JSON object keys are short, trusted strings from
+/// the input — we don't need SipHash's DoS resistance, and FxHash is
+/// materially faster (≈3–5×) for the small-key inserts we do here.
+pub type JsonObject = FxHashMap<String, JsonValue>;
 
 /// A parsed JSON value.
 ///
 /// JSON has six types, and this enum has one variant per type. All container
 /// variants own their contents — `Array` owns its `Vec`, `Object` owns its
-/// `HashMap` keys and values.
+/// map keys and values.
 ///
 /// # Examples
 ///
@@ -43,15 +51,15 @@ pub enum JsonValue {
     Array(Vec<JsonValue>),
     /// JSON object — an unordered map from string keys to values.
     /// Duplicate keys: last-wins, matching `json.loads` behaviour in Python.
-    Object(HashMap<String, JsonValue>),
+    Object(JsonObject),
 }
 
 //
 // Array(Vec<JsonValue>) — growable array. Vec lives on the heap,
 //   owns its elements, and can grow or shrink dynamically.
 //
-//  Object(HashMap<String, JsonValue>) — hash map. Keys must be String (owned),
-//   not &str (borrowed), because the HashMap needs to own its keys.
+//  Object(JsonObject) — FxHashMap<String, JsonValue>. Keys must be owned
+//   Strings (not &str) because the map needs to own its keys.
 //
 
 impl JsonValue {
@@ -99,7 +107,7 @@ impl JsonValue {
     }
 
     /// Returns a borrowed view of the inner map if this is a [`JsonValue::Object`], else `None`.
-    pub fn as_object(&self) -> Option<&HashMap<String, JsonValue>> {
+    pub fn as_object(&self) -> Option<&JsonObject> {
         match self {
             JsonValue::Object(obj) => Some(obj),
             _ => None,
@@ -171,7 +179,7 @@ impl JsonValue {
         write!(f, "]")
     }
 
-    fn fmt_object(obj: &HashMap<String, JsonValue>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt_object(obj: &JsonObject, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{{")?;
         for (i, (key, val)) in obj.iter().enumerate() {
             if i > 0 {
@@ -258,7 +266,7 @@ mod display_tests {
     #[test]
     fn test_display_empty_containers() {
         assert_eq!(JsonValue::Array(vec![]).to_string(), "[]");
-        assert_eq!(JsonValue::Object(HashMap::new()).to_string(), "{}");
+        assert_eq!(JsonValue::Object(JsonObject::default()).to_string(), "{}");
     }
 
     #[test]

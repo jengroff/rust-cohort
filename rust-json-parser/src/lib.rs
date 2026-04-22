@@ -36,6 +36,9 @@
 pub mod error;
 /// Recursive-descent parser that turns tokens into a [`JsonValue`].
 pub mod parser;
+/// Single-pass streaming parser over raw bytes — the fast path used by
+/// [`parse_json`] and the Python bindings.
+pub mod stream;
 /// Lexer that turns a JSON string into a stream of tokens.
 pub mod tokenizer;
 /// The [`JsonValue`] enum and its accessor / Display implementations.
@@ -43,7 +46,7 @@ pub mod value;
 
 pub use error::JsonError;
 pub use parser::{JsonParser, parse_json};
-pub use value::JsonValue;
+pub use value::{JsonObject, JsonValue};
 
 #[cfg(feature = "python")]
 mod python_bindings;
