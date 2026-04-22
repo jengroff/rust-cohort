@@ -142,23 +142,19 @@ impl JsonParser {
     // also don't need a final else clause b/c get() already returns None when OOB.
     // ---------------------------------------------------------------------------
 
-    // Rewrite #2 (within inline comments) ->
-    // because Rewrite #2 threw a warning -->  #[warn(clippy::redundant_pattern_matching)] :-(
-    //
+    // Rewrite #3: move the token out of the Vec with std::mem::replace
+    // instead of cloning it. Cloning a Token::String(String) allocates a
+    // fresh heap buffer every time we advance — on a 65KB JSON that's
+    // thousands of allocations just to walk the token stream. We own the
+    // Vec and only walk forward, so we can swap each slot for a cheap
+    // Token::Null placeholder and hand the real token to the caller.
     fn advance(&mut self) -> Option<Token> {
-        match self.tokens.get(self.position).cloned() {
-            // Using match to handle both cases explicitly:
-            //    Some(token) -> there is a token at that position; binds it to token (unlike _),
-            //    then increments the position, then rewraps it in Some(token) to return it.
-            Some(token) => {
-                self.position += 1;
-                Some(token)
-            }
-            None => None,
-            // None -> OOB, just pass None through
+        if self.position >= self.tokens.len() {
+            return None;
         }
-        // key difference from the rewrite #1 version -> match forces me to handle every
-        // case, necessitating the explicit None => None arm.
+        let token = std::mem::replace(&mut self.tokens[self.position], Token::Null);
+        self.position += 1;
+        Some(token)
     }
 
     fn is_at_end(&self) -> bool {

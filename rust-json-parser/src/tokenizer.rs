@@ -29,28 +29,40 @@ pub enum Token {
 // is happening and for future readability.
 //
 // -------- THE STRUCT ---------------------------
-// Tokenizer itself is public but its attributes are private
+// Tokenizer itself is public but its attributes are private.
+//
+// The `'a` lifetime says "this Tokenizer borrows from some &str that
+// outlives it". That lets us avoid copying the entire input up-front.
+// Compared with the earlier `Vec<char>` version this saves:
+//   * 4x memory (each `char` is 4 bytes; each `u8` is 1)
+//   * all the allocation/memcpy work of the upfront .chars().collect()
+//   * cache misses walking a sparse char buffer byte-by-byte
+//
+// We walk the bytes directly because every structural JSON token
+// ( { } [ ] , : " 0-9 - t f n and whitespace ) is ASCII, and UTF-8
+// continuation bytes never collide with those bytes. Multi-byte chars
+// only matter inside string literals, where we copy them through as
+// raw bytes and reconstruct a String at the end.
 //
 /// Lexer that converts a JSON string into a stream of [`Token`]s.
-pub struct Tokenizer {
-    input: Vec<char>,
+pub struct Tokenizer<'a> {
+    input: &'a [u8],
     position: usize,
 }
 
-impl Tokenizer {
+impl<'a> Tokenizer<'a> {
     // Everything inside this is either a method (takes self)
     // or an associated function (no self) - kind of like @classmethod.
     //
-    /// Build a new `Tokenizer` over `input`. The input is copied into an
-    /// owned `Vec<char>` so the caller can drop their string afterwards.
-    pub fn new(input: &str) -> Self {
-        // Self = Tokenizer; type of alias?
-        // parameter type is `input: &str` because we are borrowing
-        // the input string (caller keeps ownership of their string) but then
-        // we immediately convert it to an owned Vec<char>.
-        //
+    /// Build a new `Tokenizer` borrowing `input`. No allocation happens here —
+    /// the tokenizer just holds a byte-slice view of the caller's string.
+    pub fn new(input: &'a str) -> Self {
+        // `input.as_bytes()` is O(1) — it hands back the underlying UTF-8
+        // buffer of the &str with zero copying. Since we only look at
+        // individual bytes (and all JSON structural chars are ASCII), this
+        // is both safe and much faster than the old char-vector approach.
         Self {
-            input: input.chars().collect(),
+            input: input.as_bytes(),
             position: 0,
         }
     }
@@ -67,50 +79,52 @@ impl Tokenizer {
     /// Consume the input and return the full token stream, or a [`JsonError`]
     /// at the first lexical problem.
     pub fn tokenize(&mut self) -> Result<Vec<Token>, JsonError> {
-        let mut tokens = Vec::new();
+        // Hint: on average a JSON doc has ~1 token per ~4-5 bytes of input.
+        // Pre-sizing the Vec here saves a few reallocations on big inputs.
+        let mut tokens = Vec::with_capacity(self.input.len() / 4);
         loop {
             match self.peek() {
-                Some('{') => {
+                Some(b'{') => {
                     self.advance();
                     tokens.push(Token::LeftBrace);
                 }
-                Some('}') => {
+                Some(b'}') => {
                     self.advance();
                     tokens.push(Token::RightBrace);
                 }
-                Some('[') => {
+                Some(b'[') => {
                     self.advance();
                     tokens.push(Token::LeftBracket);
                 }
-                Some(']') => {
+                Some(b']') => {
                     self.advance();
                     tokens.push(Token::RightBracket);
                 }
-                Some(',') => {
+                Some(b',') => {
                     self.advance();
                     tokens.push(Token::Comma);
                 }
-                Some(':') => {
+                Some(b':') => {
                     self.advance();
                     tokens.push(Token::Colon);
                 }
-                Some('"') => {
+                Some(b'"') => {
                     let token = self.tokenize_string()?;
                     tokens.push(token);
                 }
-                Some('0'..='9') | Some('-') => {
+                Some(b'0'..=b'9') | Some(b'-') => {
                     let token = self.tokenize_number()?;
                     tokens.push(token);
                 }
-                Some('t') => {
+                Some(b't') => {
                     self.expect_keyword("true")?;
                     tokens.push(Token::Boolean(true));
                 }
-                Some('f') => {
+                Some(b'f') => {
                     self.expect_keyword("false")?;
                     tokens.push(Token::Boolean(false));
                 }
-                Some('n') => {
+                Some(b'n') => {
                     self.expect_keyword("null")?;
                     tokens.push(Token::Null);
                 }
@@ -120,7 +134,12 @@ impl Tokenizer {
                 Some(other) => {
                     return Err(JsonError::UnexpectedToken {
                         expected: "valid JSON token".to_string(),
-                        found: other.to_string(),
+                        // char::from(u8) maps bytes 0x00-0xFF into chars
+                        // U+0000-U+00FF. For ASCII (the common case) that's
+                        // just the printable form; for non-ASCII bytes it's
+                        // a Latin-1-style rendering, good enough for an
+                        // error message since `position` is the real locator.
+                        found: char::from(other).to_string(),
                         position: self.position,
                     });
                 }
@@ -137,17 +156,17 @@ impl Tokenizer {
     // except in Rust they're actually private.
     //
 
-    fn advance(&mut self) -> Option<char> {
-        let ch = self.input.get(self.position).copied();
-        if ch.is_some() {
+    fn advance(&mut self) -> Option<u8> {
+        let byte = self.input.get(self.position).copied();
+        if byte.is_some() {
             self.position += 1;
         }
-        ch
+        byte
     }
 
-    // Look at the current character without moving the cursor.
+    // Look at the current byte without moving the cursor.
     // &self (not &mut self) because peeking is read-only.
-    fn peek(&self) -> Option<char> {
+    fn peek(&self) -> Option<u8> {
         self.input.get(self.position).copied()
     }
 
@@ -155,16 +174,59 @@ impl Tokenizer {
     // ── STRING TOKENIZATION with escape sequences (oh the pain) ──────────────────
     //
     // This monster method handles:
-    // 1. Regular characters (push them)
+    // 1. Regular characters (push their bytes)
     // 2. Escape sequences
     // 3. Unicode escapes
     // 4. Error cases (unterminated string, invalid escape, bad unicode)
+    //
+    // We accumulate into a Vec<u8> and convert to String at the end.
+    // That's safe because every byte we push is either:
+    //   * a byte from the (valid UTF-8) input, copied through verbatim, or
+    //   * the UTF-8 encoding of a char produced by an escape sequence.
+    // Either way the final buffer is guaranteed-valid UTF-8.
     //
 
     fn tokenize_string(&mut self) -> Result<Token, JsonError> {
         let start = self.position;
         self.advance(); // skip opening "
-        let mut result = String::new();
+        let content_start = self.position;
+
+        // Fast path: scan for the closing quote OR a backslash. If we hit
+        // the quote first, the string has NO escapes and we can turn the
+        // raw byte slice straight into a String in one shot — no Vec<u8>,
+        // no per-byte pushes.
+        //
+        // This is the common case: most JSON keys and most string values
+        // don't contain escapes, so we want it to be as close to free as
+        // possible. Matches the "avoid .clone()/use with_capacity" tip
+        // from the guide — the only remaining allocation is the final
+        // String itself, which is unavoidable.
+        let mut i = content_start;
+        while i < self.input.len() {
+            let b = self.input[i];
+            if b == b'"' {
+                let bytes = &self.input[content_start..i];
+                self.position = i + 1;
+                // UTF-8 safety: the input was validated UTF-8 when taken
+                // as &str in `new()`, and b'"' is ASCII so the slice ends
+                // on a char boundary. Unchecked avoids a redundant pass.
+                let s = unsafe { std::str::from_utf8_unchecked(bytes) }.to_string();
+                return Ok(Token::String(s));
+            }
+            if b == b'\\' {
+                break; // escape found — fall through to slow path
+            }
+            i += 1;
+        }
+
+        // Slow path: escape processing needed (or input ran out).
+        // Pre-fill the buffer with the non-escape prefix we already scanned,
+        // then continue byte-by-byte. with_capacity uses the remaining input
+        // length as an upper bound to avoid reallocations.
+        let prefix = &self.input[content_start..i];
+        let mut buf: Vec<u8> = Vec::with_capacity(self.input.len() - content_start);
+        buf.extend_from_slice(prefix);
+        self.position = i;
 
         loop {
             match self.peek() {
@@ -174,25 +236,37 @@ impl Tokenizer {
                         position: start,
                     });
                 }
-                Some('"') => {
+                Some(b'"') => {
                     self.advance(); // skip closing "
                     break;
                 }
-                Some('\\') => {
+                Some(b'\\') => {
                     // found a backslash, handle the escape sequence.
                     // advance() past the backslash first.
                     self.advance();
                     let escaped_char = self.parse_escape_sequence()?;
-                    result.push(escaped_char);
-                    // could I match against self.advance() and inline the
-                    // escape handling and spare the separate method?
+                    // char::encode_utf8 writes the UTF-8 bytes of the char
+                    // into a small stack buffer; we then append them.
+                    let mut tmp = [0u8; 4];
+                    let encoded = escaped_char.encode_utf8(&mut tmp);
+                    buf.extend_from_slice(encoded.as_bytes());
                 }
-                Some(ch) => {
-                    result.push(ch);
+                Some(byte) => {
+                    // Copy the raw byte through. UTF-8 multi-byte
+                    // continuation bytes never equal b'"' (0x22) or b'\\'
+                    // (0x5C), so this loop naturally preserves multi-byte
+                    // characters without needing to decode them.
+                    buf.push(byte);
                     self.advance();
                 }
             }
         }
+        // The buffer is valid UTF-8 by construction.
+        let result = String::from_utf8(buf).map_err(|_| JsonError::UnexpectedToken {
+            expected: "valid UTF-8 string contents".to_string(),
+            found: "invalid UTF-8".to_string(),
+            position: start,
+        })?;
         Ok(Token::String(result))
     }
 
@@ -200,7 +274,7 @@ impl Tokenizer {
     // ── ESCAPE SEQUENCE PARSING ───────────────────────────────────────
     //
     // Called after we've already consumed the backslash. Now we need to
-    // look at the NEXT character to figure out what escape this is.
+    // look at the NEXT byte to figure out what escape this is.
     //
     // Python handles these in string literals automatically, but we're
     // building a JSON parser in Rust, so yeah, we're screwed.
@@ -208,19 +282,19 @@ impl Tokenizer {
     fn parse_escape_sequence(&mut self) -> Result<char, JsonError> {
         let pos = self.position;
         match self.advance() {
-            Some('"') => Ok('"'),
-            Some('\\') => Ok('\\'),
-            Some('/') => Ok('/'),
-            Some('b') => Ok('\u{0008}'),
-            Some('f') => Ok('\u{000C}'),
+            Some(b'"') => Ok('"'),
+            Some(b'\\') => Ok('\\'),
+            Some(b'/') => Ok('/'),
+            Some(b'b') => Ok('\u{0008}'),
+            Some(b'f') => Ok('\u{000C}'),
             // For \n, \r, \t — Rust has first-class escape literals, so you
             // can just write '\n' directly. No need for '\u{000A}'.
-            Some('n') => Ok('\n'),
-            Some('r') => Ok('\r'),
-            Some('t') => Ok('\t'),
-            Some('u') => self.parse_unicode_escape(),
+            Some(b'n') => Ok('\n'),
+            Some(b'r') => Ok('\r'),
+            Some(b't') => Ok('\t'),
+            Some(b'u') => self.parse_unicode_escape(),
             Some(c) => Err(JsonError::InvalidEscape {
-                ch: c,
+                ch: char::from(c),
                 position: pos,
             }),
             None => Err(JsonError::UnexpectedEndOfInput {
@@ -234,7 +308,7 @@ impl Tokenizer {
     // ── UNICODE ESCAPE PARSING (\uXXXX) ──────────────────────────────
     //
     // After consuming \u, we need exactly 4 hex digits, so we:
-    //   1. Read 4 characters
+    //   1. Read 4 bytes
     //   2. Verify they're all valid hex (0-9, a-f, A-F)
     //   3. Parse the hex string to a u32 number
     //   4. Convert that number to a char
@@ -251,32 +325,50 @@ impl Tokenizer {
     //
     fn parse_unicode_escape(&mut self) -> Result<char, JsonError> {
         let start_pos = self.position;
-        let mut hex_str = String::with_capacity(4);
 
-        for _ in 0..4 {
-            match self.advance() {
-                Some(c) if c.is_ascii_hexdigit() => hex_str.push(c),
-                Some(_) | None => {
-                    return Err(JsonError::InvalidUnicode {
-                        sequence: hex_str,
-                        position: start_pos,
-                    });
-                }
-            }
+        // Need exactly 4 bytes left in the input for the hex digits.
+        if self.position + 4 > self.input.len() {
+            // Consume whatever's left so the position field points past the
+            // malformed sequence, and report what we saw.
+            let tail = &self.input[self.position..];
+            self.position = self.input.len();
+            let seq = std::str::from_utf8(tail).unwrap_or("").to_string();
+            return Err(JsonError::InvalidUnicode {
+                sequence: seq,
+                position: start_pos,
+            });
         }
 
+        let hex_bytes = &self.input[self.position..self.position + 4];
+        if !hex_bytes.iter().all(|b| b.is_ascii_hexdigit()) {
+            // Not all hex digits. Pull out whatever prefix IS hex for the
+            // error message (mirrors the old behaviour) then bail.
+            let kept: String = hex_bytes
+                .iter()
+                .take_while(|b| b.is_ascii_hexdigit())
+                .map(|b| char::from(*b))
+                .collect();
+            self.position += 4;
+            return Err(JsonError::InvalidUnicode {
+                sequence: kept,
+                position: start_pos,
+            });
+        }
+        self.position += 4;
+
+        // hex_bytes is ASCII by the check above, so from_utf8 is infallible.
+        let hex_str =
+            std::str::from_utf8(hex_bytes).expect("hex digits are ASCII");
         let code_point =
-            // .map_err() converts the ParseIntError to our JsonError type.
-            // ? then propagates the error if it's Err.
-            u32::from_str_radix(&hex_str, 16).map_err(|_| JsonError::InvalidUnicode {
-                sequence: hex_str.clone(),
+            u32::from_str_radix(hex_str, 16).map_err(|_| JsonError::InvalidUnicode {
+                sequence: hex_str.to_string(),
                 position: start_pos,
             })?;
 
         char::from_u32(code_point).ok_or(JsonError::InvalidUnicode {
             // Unicode scalar value (surrogate pairs, values > 0x10FFFF).
             // .ok_or() converts None → Err, Some(ch) → Ok(ch).
-            sequence: hex_str,
+            sequence: hex_str.to_string(),
             position: start_pos,
         })
     }
@@ -284,27 +376,41 @@ impl Tokenizer {
     //
     // ── NUMBER TOKENIZATION ───────────────────────────────────────────
     //
-    // We read digits (and -, .) until we hit a non-numeric char,
-    // then parse the accumulated string as f64,
+    // We read digit-like bytes (and -, .) until we hit a non-numeric byte,
+    // then parse the accumulated slice as f64,
     // then take 2 more Advil.
     //
     fn tokenize_number(&mut self) -> Result<Token, JsonError> {
         let start = self.position;
-        let mut num_str = String::new();
 
         while let Some(ch) = self.peek() {
-            if ch.is_ascii_digit() || ch == '.' || ch == '-' {
-                num_str.push(ch);
+            // Accept digits plus '.', '-', 'e', 'E', '+' so scientific
+            // notation (1.5e-3) survives. The final f64::parse() will
+            // reject anything that isn't really a number.
+            if ch.is_ascii_digit()
+                || ch == b'.'
+                || ch == b'-'
+                || ch == b'e'
+                || ch == b'E'
+                || ch == b'+'
+            {
                 self.advance();
             } else {
                 break;
             }
         }
 
+        // Slice the number bytes directly out of the input. No intermediate
+        // String allocation — we go straight from &[u8] → &str → f64.
+        let num_bytes = &self.input[start..self.position];
+        // UTF-8 safety: all accepted bytes above are ASCII, so this slice is
+        // valid UTF-8.
+        let num_str = std::str::from_utf8(num_bytes).expect("numeric bytes are ASCII");
+
         match num_str.parse::<f64>() {
             Ok(n) => Ok(Token::Number(n)),
             Err(_) => Err(JsonError::InvalidNumber {
-                value: num_str,
+                value: num_str.to_string(),
                 position: start,
             }),
         }
@@ -313,18 +419,24 @@ impl Tokenizer {
     //
     // ── KEYWORD MATCHING ──────────────────────────────────────────────
     //
-    // Checks that the next N characters match the expected keyword exactly.
+    // Checks that the next N bytes match the expected keyword exactly.
     // Used for "true", "false", "null".
     //
     fn expect_keyword(&mut self, keyword: &str) -> Result<(), JsonError> {
         let start = self.position;
-        for expected_ch in keyword.chars() {
+        for expected_byte in keyword.as_bytes() {
             match self.advance() {
-                Some(ch) if ch == expected_ch => {}
+                Some(b) if b == *expected_byte => {}
                 _ => {
+                    // Report whatever bytes we consumed so far as the 'found'
+                    // substring. These are ASCII by construction (we only got
+                    // here because the dispatch matched an ASCII letter).
+                    let found = std::str::from_utf8(&self.input[start..self.position])
+                        .unwrap_or("")
+                        .to_string();
                     return Err(JsonError::UnexpectedToken {
                         expected: keyword.to_string(),
-                        found: self.input[start..self.position].iter().collect::<String>(),
+                        found,
                         position: start,
                     });
                 }
@@ -451,7 +563,7 @@ mod tests {
 
     #[test]
     fn test_unicode_escape_basic() {
-        // \u0041 is 'A'
+        // A is 'A'
         let mut tokenizer = Tokenizer::new(r#""\u0041""#);
         let tokens = tokenizer.tokenize().unwrap();
         assert_eq!(tokens, vec![Token::String("A".to_string())]);
@@ -459,7 +571,7 @@ mod tests {
 
     #[test]
     fn test_unicode_escape_multiple() {
-        // \u0048\u0069 is "Hi"
+        // Hi is "Hi"
         let mut tokenizer = Tokenizer::new(r#""\u0048\u0069""#);
         let tokens = tokenizer.tokenize().unwrap();
         assert_eq!(tokens, vec![Token::String("Hi".to_string())]);
