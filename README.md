@@ -143,15 +143,21 @@ python -m rust_json_parser --benchmark
 
 `benchmark_performance(json_str, iterations=1000)` times three parsers on the same input and returns the total elapsed seconds for each: this crate's `parse_json` (Python-facing, builds a `dict`/`list` tree directly), Python's built-in `json.loads` (C implementation), and `simplejson.loads` (pure Python).
 
-Results from `python -m rust_json_parser --benchmark` on a recent run (1000 iterations per size):
+Results from `python -m rust_json_parser --benchmark` on a recent run (1000 iterations per size, realistic per-item fixtures with strings/floats/bools/nested objects, `simplejson` forced into pure-Python mode):
 
-| Input size | Rust | `json` (C) | `simplejson` | Rust vs `json` |
-|---|---|---|---|---|
-| Small (25 B) | 0.000183s | 0.001168s | 0.001445s | **6.37× faster** |
-| Medium (2,991 B) | 0.021563s | 0.035678s | 0.030083s | **1.65× faster** |
-| Large (65,791 B) | 0.485438s | 0.727906s | 0.659860s | **1.50× faster** |
+| Input size | Rust | `json` (C) | `simplejson` (pure-Python) | Rust vs `json` | Rust vs `simplejson` |
+|---|---|---|---|---|---|
+| Small (109 B) | 0.000350s | 0.001335s | 0.009439s | **3.82× faster** | **26.98× faster** |
+| Medium (11 KB) | 0.076262s | 0.092064s | 0.908889s | **1.21× faster** | **11.92× faster** |
+| Large (118 KB) | 0.598332s | 0.869570s | 7.885628s | **1.45× faster** | **13.18× faster** |
+| XLarge (548 KB) | 3.219725s | 3.797877s | 36.240227s | **1.18× faster** | **11.26× faster** |
+| Deeply nested (228 levels) | 0.055264s | 0.080852s | 0.869275s | **1.46× faster** | **15.73× faster** |
 
-Numbers are a rough snapshot on one machine; run the benchmark locally for apples-to-apples. Three changes drove the medium/large wins over the first cut of this parser:
+Every run writes a timestamped `benchmark_results.md` to the working directory with platform metadata and per-iteration totals.
+
+A note on the simplejson column: the pip-installed wheel ships a C accelerator (`_speedups.so`) that `simplejson.loads` picks up automatically, so a naive benchmark turns it into a second Rust-vs-C comparison. The CLI patches `simplejson.loads` to use `py_make_scanner` + `py_scanstring` before timing, so the third column measures the genuine Rust-vs-pure-Python gap.
+
+Numbers are a snapshot on one machine; run the benchmark locally for apples-to-apples. Three changes drove the wins over the first cut of this parser:
 
 1. **Single-pass streaming parser.** The original tokenizer materialised a `Vec<Token>` before the parser started. `src/stream.rs` merges lex and parse into one recursive descent over the raw `&[u8]`, so thousands of `Token::String(String)` allocations disappear on big inputs.
 2. **`memchr` + `FxHashMap`.** Inner loops that scan string bodies for `"` or `\` now use `memchr::memchr2` (SIMD-accelerated). Object parsing switched from `std::HashMap` (SipHash) to `rustc_hash::FxHashMap`, which is ≈3–5× faster for the short, trusted keys we're inserting.
