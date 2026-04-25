@@ -7,7 +7,14 @@ name = "rust-json-parser"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    # Reference parsers used by the benchmark suite. Kept as required deps
+    # rather than optional extras because `python -m rust_json_parser
+    # --benchmark` is part of the user-facing surface — `pip install` should
+    # produce a working benchmark out of the box.
     "simplejson>=3.19.0",
+    "orjson>=3.9",
+    "msgspec>=0.18",
+    "ujson>=5.0",
 ]
 
 [tool.maturin]
