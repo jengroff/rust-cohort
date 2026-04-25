@@ -211,4 +211,4 @@ rust-json-parser/
 
 ## Credits
 
-I built this parser during the 6-week Rust-for-Python-developers course taught by [Jim Hodapp](https://github.com/jhodapp) and [Bob Belderbos](https://belderbos.dev/coaching/rust/). The performance work documented above came after the main coursework wrapped, but it stands directly on the Rust foundation they laid: ownership, borrowing, lifetimes, idiomatic recursive descent, the discipline of letting the compiler check the things humans get wrong. Any speed in the explanations here is theirs; any remaining naïveté is mine.
+I built this parser during the 6-week Rust-for-Python-developers course taught by [Jim Hodapp](https://refactorcoach.com/coaching/) and [Bob Belderbos](https://belderbos.dev/coaching/rust/). The performance work documented above came after the main coursework wrapped, but it stands directly on the Rust foundation they laid: ownership, borrowing, lifetimes, idiomatic recursive descent, the discipline of letting the compiler check the things humans get wrong. Any speed in the explanations here is theirs; any remaining naïveté is mine.
