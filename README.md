@@ -1,6 +1,6 @@
 # rust-json-parser
 
-A JSON parser built in Rust, written as part of rust-cohort-2.
+A JSON parser built in Rust, written as part of [rust-cohort-2](https://refactorcoach.com/coaching/).
 
 ## What it does
 
