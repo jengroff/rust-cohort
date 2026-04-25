@@ -43,7 +43,7 @@ JsonValue::Boolean(bool)
 JsonValue::Number(f64)
 JsonValue::Text(String)
 JsonValue::Array(Vec<JsonValue>)
-JsonValue::Object(HashMap<String, JsonValue>)
+JsonValue::Object(JsonObject)  // = FxHashMap<String, JsonValue>; see wiki for why
 ```
 
 Accessor methods (`is_null`, `as_bool`, `as_f64`, `as_str`, `as_array`, `as_object`, `get`, `get_index`) return `Option<&T>` for safe, pattern-free access. `Display` produces compact JSON.
@@ -165,6 +165,8 @@ Numbers are a snapshot on one machine; run the benchmark locally for apples-to-a
 
 The pure-Rust `crate::parser::parse_json` (returning `JsonValue`) and the `tokenizer`/`JsonParser` two-pass classroom version are kept for pedagogy and are still tested — they're just no longer on the hot path.
 
+For a page-by-page deep dive on each of these decisions, plus a concept primer covering strings/bytes/UTF-8, ownership, lifetimes, and the PyO3 mental model for Python developers landing on Rust, see the [project wiki](https://github.com/jengroff/rust-cohort/wiki).
+
 ## Building
 
 ```bash
@@ -206,3 +208,7 @@ rust-json-parser/
   tests/
     test_python_integration.py      # pytest suite for the FFI layer
 ```
+
+## Credits
+
+I built this parser during the 6-week Rust-for-Python-developers course taught by [Jim Hodapp](https://github.com/jhodapp) and [Bob Belderbos](https://belderbos.dev/coaching/rust/). The performance work documented above came after the main coursework wrapped, but it stands directly on the Rust foundation they laid: ownership, borrowing, lifetimes, idiomatic recursive descent, the discipline of letting the compiler check the things humans get wrong. Any speed in the explanations here is theirs; any remaining naïveté is mine.
