@@ -141,23 +141,47 @@ python -m rust_json_parser --benchmark
 
 ## Benchmarks
 
-`benchmark_performance(json_str, iterations=1000)` times three parsers on the same input and returns the total elapsed seconds for each: this crate's `parse_json` (Python-facing, builds a `dict`/`list` tree directly), Python's built-in `json.loads` (C implementation), and `simplejson.loads` (pure Python).
+`python -m rust_json_parser --benchmark` runs an 8-fixture × 6-parser suite and writes a timestamped `benchmark_results.md` next to the invocation. Methodology: per (parser, fixture), 3 warmup batches discarded then 30 timed batches, batch size adapts so each batch takes ~100 ms; per-iteration time is `batch_time / batch_size`. Stats reported are computed over the 30 samples.
 
-Results from `python -m rust_json_parser --benchmark` on a recent run (1000 iterations per size, realistic per-item fixtures with strings/floats/bools/nested objects, `simplejson` forced into pure-Python mode):
+The competition:
 
-| Input size | Rust | `json` (C) | `simplejson` (pure-Python) | Rust vs `json` | Rust vs `simplejson` |
-|---|---|---|---|---|---|
-| Small (109 B) | 0.000350s | 0.001335s | 0.009439s | **3.82× faster** | **26.98× faster** |
-| Medium (11 KB) | 0.076262s | 0.092064s | 0.908889s | **1.21× faster** | **11.92× faster** |
-| Large (118 KB) | 0.598332s | 0.869570s | 7.885628s | **1.45× faster** | **13.18× faster** |
-| XLarge (548 KB) | 3.219725s | 3.797877s | 36.240227s | **1.18× faster** | **11.26× faster** |
-| Deeply nested (228 levels) | 0.055264s | 0.080852s | 0.869275s | **1.46× faster** | **15.73× faster** |
+- **`json`** — CPython's stdlib JSON module (C implementation). Reference baseline.
+- **`orjson`** — Rust+PyO3, by ijl. The default "faster than json" answer in the Python ecosystem.
+- **`msgspec`** — C, by Jim Crist-Harif. Schema-aware decoder; very fast even without a schema.
+- **`ujson`** — long-running C library; used to dominate, now closer to stdlib `json` on Python 3.11+.
+- **`simplejson`** — pure-Python (with the pip-installed wheel's `_speedups` C accelerator monkey-patched out before timing, so this column measures the genuine Rust-vs-pure-Python gap rather than a second Rust-vs-C comparison).
 
-Every run writes a timestamped `benchmark_results.md` to the working directory with platform metadata and per-iteration totals.
+Throughput in MB/s (input size ÷ median time per parse), measured on Linux x86-64, Python 3.14:
 
-A note on the simplejson column: the pip-installed wheel ships a C accelerator (`_speedups.so`) that `simplejson.loads` picks up automatically, so a naive benchmark turns it into a second Rust-vs-C comparison. The CLI patches `simplejson.loads` to use `py_make_scanner` + `py_scanstring` before timing, so the third column measures the genuine Rust-vs-pure-Python gap.
+| Fixture | Size | **rust_json_parser** | orjson | msgspec | ujson | json (stdlib) | simplejson |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Small (synthetic) | 109 B | **146** | 255 | 286 | 113 | 60 | 12 |
+| Medium (synthetic) | 11.5 KB | **199** | 305 | 251 | 177 | 142 | 12 |
+| Large (synthetic) | 117.7 KB | **177** | 311 | 302 | 178 | 145 | 13 |
+| XLarge (synthetic) | 560.8 KB | **131** | 243 | 260 | 157 | 123 | 12 |
+| Deeply nested (228 levels) | 10.3 KB | **174** | 290 | 268 | 146 | 134 | 8 |
+| `citm_catalog.json` (real) | 1.7 MB | **344** | 442 | 337 | 381 | 189 | 22 |
+| `canada.json` (real, float-heavy) | 2.3 MB | **196** | 258 | 209 | 121 | 66 | 13 |
+| `twitter.json` (real, unicode + escapes) | 631.5 KB | **247** | 519 | 423 | 283 | 175 | 24 |
 
-Numbers are a snapshot on one machine; run the benchmark locally for apples-to-apples. Three changes drove the wins over the first cut of this parser:
+Same data as "× faster than stdlib `json`":
+
+| Fixture | rust_json_parser vs json (stdlib) |
+|---|---|
+| Small | **2.43× faster** |
+| Medium | **1.40× faster** |
+| Large | **1.22× faster** |
+| XLarge | **1.07× faster** |
+| Deeply nested | **1.30× faster** |
+| `citm_catalog.json` | **1.82× faster** |
+| `canada.json` | **2.96× faster** |
+| `twitter.json` | **1.42× faster** |
+
+The honest landscape: this parser sits **mid-pack of the well-known faster-than-stdlib club**. It beats CPython's stdlib `json` on every fixture in the suite, including all three real-world files (`citm_catalog`, `canada`, `twitter`) that are the canonical inputs every JSON library benchmarks against. It trades places with `ujson` (a long-established C library), and on `citm_catalog` specifically it edges past `msgspec` — that one's a genuine surprise, the workload (small ints + short escape-free strings) lands in this parser's tuned paths. `orjson` wins on every fixture; that's expected, orjson has years of full-time engineering behind it.
+
+The real-world fixtures (`citm_catalog.json`, `canada.json`, `twitter.json`) come from the simdjson and serde-json benchmark suites — the same files orjson, msgspec, simdjson, and yyjson all benchmark against. Pulling them in puts the numbers above in the same vocabulary as the rest of the ecosystem rather than only on synthetic shapes that might inadvertently flatter the implementation. Re-pull with `python benchmarks/download_fixtures.py`; the SHA hashes are pinned so upstream churn doesn't silently change what we measure on.
+
+Three changes drove the gap over stdlib `json`:
 
 1. **Single-pass streaming parser.** The original tokenizer materialised a `Vec<Token>` before the parser started. `src/stream.rs` merges lex and parse into one recursive descent over the raw `&[u8]`, so thousands of `Token::String(String)` allocations disappear on big inputs.
 2. **`memchr` + `FxHashMap`.** Inner loops that scan string bodies for `"` or `\` now use `memchr::memchr2` (SIMD-accelerated). Object parsing switched from `std::HashMap` (SipHash) to `rustc_hash::FxHashMap`, which is ≈3–5× faster for the short, trusted keys we're inserting.
@@ -205,6 +229,11 @@ rust-json-parser/
     rust_json_parser/
       __init__.py                   # re-exports from the compiled extension
       __main__.py                   # `python -m rust_json_parser` CLI
+      benchmark.py                  # timing harness, statistics, output formatters
+      fixtures.py                   # synthetic generators + real-world fixture loaders
+  benchmarks/
+    download_fixtures.py            # one-shot script to fetch citm_catalog/canada/twitter
+    fixtures/                       # canonical real-world JSON files (committed, ~5 MB)
   tests/
     test_python_integration.py      # pytest suite for the FFI layer
 ```

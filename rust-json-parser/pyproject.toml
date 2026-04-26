@@ -17,7 +17,21 @@ dependencies = [
     "ujson>=5.0",
 ]
 
+[dependency-groups]
+# Build-time tools needed when developing on this project. uv installs the
+# `dev` group by default on `uv sync`, so `uv run maturin develop --release`
+# keeps working without an extra flag. maturin also lives in
+# [build-system].requires above, but uv treats those as build-only and prunes
+# them from the venv — repeating it here keeps the binary on PATH for direct
+# invocation.
+dev = ["maturin>=1.0,<2.0"]
+
 [tool.maturin]
 python-source = "python"
 module-name = "rust_json_parser._rust_json_parser"
 features = ["pyo3/extension-module"]
+# Default cargo profile for builds driven through PEP 517 (i.e. `uv sync`,
+# `pip install -e .`). Without this, those flows produce debug builds, which
+# tank benchmark numbers in confusing ways. Explicit `maturin develop
+# --release` overrides this; `maturin develop` (no flag) inherits it.
+profile = "release"
